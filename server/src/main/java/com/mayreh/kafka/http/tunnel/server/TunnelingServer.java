@@ -1,5 +1,9 @@
 package com.mayreh.kafka.http.tunnel.server;
 
+import java.net.InetSocketAddress;
+
+import com.mayreh.kafka.http.tunnel.server.KafkaConnections.ConnectionId;
+
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.HttpStatus;
 import com.linecorp.armeria.common.MediaType;
@@ -7,16 +11,27 @@ import com.linecorp.armeria.server.Server;
 
 public class TunnelingServer implements AutoCloseable {
     private final Server server;
+    private final KafkaConnections connections = new KafkaConnections();
 
     public TunnelingServer(int port) {
         server = Server
                 .builder()
                 .service("/proxy", (ctx, req) -> {
-                    ctx.remoteAddress()
-                    req.aggregate().join()
-                    return HttpResponse.of(HttpStatus.OK,
-                                           MediaType.OCTET_STREAM,
-                                           )
+                    String host = req.headers().get("Host");
+                    String brokerHost = host.substring(0, host.indexOf(':'));
+                    int brokerPort = Integer.parseInt(host.substring(host.indexOf(':') + 1));
+                    InetSocketAddress brokerAddress = new InetSocketAddress(brokerHost, brokerPort);
+                    ConnectionId id = new ConnectionId(ctx.remoteAddress(), brokerAddress);
+                    return HttpResponse.of(req.aggregate().thenCompose(agg -> {
+                        return connections
+                                .getOrConnect(id)
+                                .send(agg.content().array())
+                                .thenApply(res -> {
+                                    return HttpResponse.of(HttpStatus.OK,
+                                                           MediaType.OCTET_STREAM,
+                                                           res);
+                                });
+                    }));
                 })
                 .http(port)
                 .build();
@@ -24,7 +39,11 @@ public class TunnelingServer implements AutoCloseable {
     }
 
     public static void main(String[] args) {
-        TunnelingServer server = new TunnelingServer(Integer.parseInt(args[0]));
+        int port = 8080;
+        if (args.length > 0) {
+            port = Integer.parseInt(args[0]);
+        }
+        TunnelingServer server = new TunnelingServer(port);
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
     }
 

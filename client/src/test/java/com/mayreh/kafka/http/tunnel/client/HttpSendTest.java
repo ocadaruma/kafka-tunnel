@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +33,7 @@ public class HttpSendTest {
             return len;
         }).when(delegate).write(any(ByteBuffer.class));
 
-        HttpSend send = new HttpSend(delegate);
+        HttpSend send = new HttpSend(delegate, new InetSocketAddress("localhost", 9092));
 
         assertTrue(send.hasRemaining());
 
@@ -45,7 +46,7 @@ public class HttpSendTest {
         written.flip();
 
         byte[] httpLine = ("POST /proxy HTTP/1.1\r\n" +
-                           "Host: localhost:8080\r\n" +
+                           "Host: localhost:9092\r\n" +
                            "Content-Type: application/octet-stream\r\n" +
                            "Content-Length: 7\r\n" +
                            "\r\n").getBytes(StandardCharsets.UTF_8);

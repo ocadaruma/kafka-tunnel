@@ -1,6 +1,7 @@
 package com.mayreh.kafka.http.tunnel.client;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ProtocolFamily;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.Pipe;
@@ -10,6 +11,7 @@ import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
 
 public class TunnelingSelectorProvider extends SelectorProvider {
+    private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
     private final SelectorProvider defaultProvider = sun.nio.ch.DefaultSelectorProvider.create();
 
     @Override
@@ -41,9 +43,13 @@ public class TunnelingSelectorProvider extends SelectorProvider {
     public SocketChannel openSocketChannel() throws IOException {
         StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
         for (StackTraceElement element : stackTrace) {
-            if (element.getClassName().equals("org.apache.kafka.common.network.Selector")) {
+            if ("org.apache.kafka.common.network.Selector".equals(element.getClassName())) {
+                String tunnelEndpoint = System.getProperty(TUNNEL_ENDPOINT_PROPERTY);
+                String tunnelHost = tunnelEndpoint.split(":")[0];
+                int tunnelPort = Integer.parseInt(tunnelEndpoint.split(":")[1]);
                 SocketChannel delegate = defaultProvider.openSocketChannel();
-                return new TunnelingSocketChannel(this, delegate);
+                return new TunnelingSocketChannel(
+                        this, delegate, new InetSocketAddress(tunnelHost, tunnelPort));
             }
         }
         return defaultProvider.openSocketChannel();

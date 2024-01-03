@@ -1,28 +1,22 @@
 package com.mayreh.kafka.http.tunnel.client;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 
 public class HttpSend {
-    private static final byte[] httpPrefix =
-            ("POST /proxy HTTP/1.1\r\n" +
-             "Host: localhost:8080\r\n" +
-             "Content-Type: application/octet-stream\r\n" +
-             "Content-Length: ").getBytes(StandardCharsets.UTF_8);
-
     private final ByteBuffer httpAndSize;
     private final SocketChannel delegate;
+    private final InetSocketAddress brokerAddress;
 
     private int remainingMessageSize = -1;
 
-    public HttpSend(SocketChannel delegate) {
+    public HttpSend(SocketChannel delegate, InetSocketAddress brokerAddress) {
         this.delegate = delegate;
-        // allocate max possible size of HTTP line + size
-        // prefix + 10 (length of "2147483647") + 4 (\r\n\r\n) + 4 (size of kafka message part)
-        httpAndSize = ByteBuffer.allocate(httpPrefix.length + 10 + 4 + 4);
-        httpAndSize.put(httpPrefix);
+        this.brokerAddress = brokerAddress;
+        httpAndSize = ByteBuffer.allocate(512);
     }
 
     /**
@@ -33,9 +27,14 @@ public class HttpSend {
         int written = 0;
         if (remainingMessageSize < 0) {
             // we don't need to care about the fragmentation of int bytes
-            // since kafka-clients always sends message size in initial call
+            // since kafka-clients always sends message size at initial call
             remainingMessageSize = message.getInt();
             written += 4;
+
+            httpAndSize.put("POST /proxy HTTP/1.1\r\n".getBytes(StandardCharsets.UTF_8));
+            httpAndSize.put(String.format("Host: %s:%d\r\n", brokerAddress.getHostName(), brokerAddress.getPort()).getBytes(StandardCharsets.UTF_8));
+            httpAndSize.put("Content-Type: application/octet-stream\r\n".getBytes(StandardCharsets.UTF_8));
+            httpAndSize.put("Content-Length: ".getBytes(StandardCharsets.UTF_8));
 
             // content length will be the size of Kafka message + 4 (size of kafka message which we just read)
             httpAndSize.put(String.valueOf(remainingMessageSize + 4).getBytes(StandardCharsets.UTF_8));

@@ -1,6 +1,7 @@
 package com.mayreh.kafka.http.tunnel.client;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -11,14 +12,18 @@ import java.util.Set;
 
 public class TunnelingSocketChannel extends SocketChannel {
     private final SocketChannel delegate;
+    private final InetSocketAddress tunnelServer;
+    private InetSocketAddress brokerAddress = null;
     private HttpSend send = null;
     private HttpReceive receive = null;
 
     public TunnelingSocketChannel(
             SelectorProvider provider,
-            SocketChannel delegate) {
+            SocketChannel delegate,
+            InetSocketAddress tunnelServer) {
         super(provider);
         this.delegate = delegate;
+        this.tunnelServer = tunnelServer;
     }
 
     @Override
@@ -70,7 +75,8 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public boolean connect(SocketAddress remote) throws IOException {
-        return delegate.connect(remote);
+        brokerAddress = (InetSocketAddress) remote;
+        return delegate.connect(tunnelServer);
     }
 
     @Override
@@ -103,7 +109,7 @@ public class TunnelingSocketChannel extends SocketChannel {
     @Override
     public int write(ByteBuffer src) throws IOException {
         if (send == null) {
-            send = new HttpSend(delegate);
+            send = new HttpSend(delegate, brokerAddress);
         }
         int written = send.write(src);
         if (!send.hasRemaining()) {
