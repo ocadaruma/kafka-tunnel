@@ -6,6 +6,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class HttpSend {
     private final ByteBuffer httpAndSize;
     private final SocketChannel delegate;
@@ -26,6 +29,16 @@ public class HttpSend {
     public int write(ByteBuffer message) throws IOException {
         int written = 0;
         if (remainingMessageSize < 0) {
+            if (log.isDebugEnabled()) {
+                ByteBuffer dup = message.duplicate();
+                int size = dup.getInt();
+                short apiKey = dup.getShort();
+                short apiVersion = dup.getShort();
+                int correlationId = dup.getInt();
+                log.debug("Sending request. Size: {}, ApiKey: {}, ApiVersion: {}, CorrelationId: {}",
+                          size, apiKey, apiVersion, correlationId);
+            }
+
             // we don't need to care about the fragmentation of int bytes
             // since kafka-clients always sends message size at initial call
             remainingMessageSize = message.getInt();
@@ -50,6 +63,7 @@ public class HttpSend {
         }
         if (!httpAndSize.hasRemaining()) {
             if (remainingMessageSize > 0) {
+                // TODO: handle negative written bytes (EOF)
                 int w = delegate.write(message);
                 remainingMessageSize -= w;
                 written += w;

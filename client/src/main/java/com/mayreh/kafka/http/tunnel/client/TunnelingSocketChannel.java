@@ -1,6 +1,8 @@
 package com.mayreh.kafka.http.tunnel.client;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -10,7 +12,10 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.Set;
 
-public class TunnelingSocketChannel extends SocketChannel {
+import sun.nio.ch.SelChImpl;
+import sun.nio.ch.SelectionKeyImpl;
+
+public class TunnelingSocketChannel extends SocketChannel implements SelChImpl {
     private final SocketChannel delegate;
     private final InetSocketAddress tunnelServer;
     private InetSocketAddress brokerAddress = null;
@@ -120,7 +125,16 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-        throw new UnsupportedOperationException();
+        int totalWritten = 0;
+        for (int i = offset; i < offset + length; i++) {
+            if (srcs[i].hasRemaining()) {
+                totalWritten += write(srcs[i]);
+            }
+            if (srcs[i].hasRemaining()) {
+                break;
+            }
+        }
+        return totalWritten;
     }
 
     @Override
@@ -131,9 +145,9 @@ public class TunnelingSocketChannel extends SocketChannel {
     @Override
     protected void implCloseSelectableChannel() throws IOException {
         try {
-            delegate.getClass()
-                    .getDeclaredMethod("implCloseSelectableChannel")
-                    .invoke(delegate);
+            Method method = delegate.getClass().getDeclaredMethod("implCloseSelectableChannel");
+            method.setAccessible(true);
+            method.invoke(delegate);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
@@ -142,11 +156,41 @@ public class TunnelingSocketChannel extends SocketChannel {
     @Override
     protected void implConfigureBlocking(boolean block) throws IOException {
         try {
-            delegate.getClass()
-                    .getDeclaredMethod("implConfigureBlocking", boolean.class)
-                    .invoke(delegate, block);
+            Method method = delegate.getClass().getDeclaredMethod("implConfigureBlocking", boolean.class);
+            method.setAccessible(true);
+            method.invoke(delegate, block);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public FileDescriptor getFD() {
+        return ((SelChImpl) delegate).getFD();
+    }
+
+    @Override
+    public int getFDVal() {
+        return ((SelChImpl) delegate).getFDVal();
+    }
+
+    @Override
+    public boolean translateAndUpdateReadyOps(int ops, SelectionKeyImpl ski) {
+        return ((SelChImpl) delegate).translateAndUpdateReadyOps(ops, ski);
+    }
+
+    @Override
+    public boolean translateAndSetReadyOps(int ops, SelectionKeyImpl ski) {
+        return ((SelChImpl) delegate).translateAndSetReadyOps(ops, ski);
+    }
+
+    @Override
+    public int translateInterestOps(int ops) {
+        return ((SelChImpl) delegate).translateInterestOps(ops);
+    }
+
+    @Override
+    public void kill() throws IOException {
+        ((SelChImpl) delegate).kill();
     }
 }

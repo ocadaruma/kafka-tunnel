@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import lombok.Getter;
@@ -103,7 +104,7 @@ public class HttpReceive {
                 case CarriageReturnAtHttpEnd:
                     if (b == '\n') {
                         state = ParseState.KafkaMessage;
-                        remainingMessageSize = Integer.parseInt(headers.get("Content-Length"));
+                        remainingMessageSize = Integer.parseInt(headers.get("content-length"));
                         break loop;
                     } else {
                         throw new IOException("Invalid HTTP response");
@@ -128,6 +129,8 @@ public class HttpReceive {
     }
 
     private static void checkHttpStatus(String statusLine) {
+        // TODO: Fix parsing logic.
+        // status line could contain space in reason phrase.
         String[] parts = statusLine.split(" ");
         if (parts.length != 3) {
             throw new IllegalStateException("Invalid status line: " + statusLine);
@@ -142,14 +145,8 @@ public class HttpReceive {
     }
 
     private void parseHeader(String headerLine) {
-        String[] parts = headerLine.split(":");
-        if (parts.length != 2) {
-            throw new IllegalStateException("Invalid header line: " + headerLine);
-        }
-
-        String key = parts[0].trim();
-        String value = parts[1].trim();
-
+        String key = headerLine.substring(0, headerLine.indexOf(":")).toLowerCase(Locale.ROOT);
+        String value = headerLine.substring(headerLine.indexOf(":") + 1).trim();
         headers.put(key, value);
     }
 }

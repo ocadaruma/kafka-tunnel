@@ -1,6 +1,7 @@
 package com.mayreh.kafka.http.tunnel.server;
 
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -79,18 +80,28 @@ public class KafkaConnections {
     public KafkaConnection getOrConnect(ConnectionId id) {
         return connectionMap.computeIfAbsent(id, key -> {
             ChannelFuture future = bootstrap.connect(id.brokerAddress);
-            KafkaConnection conn = new KafkaConnection(future.channel());
+            CompletableFuture<Void> connectFuture = new CompletableFuture<>();
+            future.addListener(f -> {
+                if (f.isSuccess()) {
+                    connectFuture.complete(null);
+                } else {
+                    connectFuture.completeExceptionally(f.cause());
+                }
+            });
+            KafkaConnection conn = new KafkaConnection(future.channel(), connectFuture);
             future.channel().attr(KafkaConnection.ATTR_KEY).set(conn);
             return conn;
         });
     }
 
     @RequiredArgsConstructor
+    @Slf4j
     static class KafkaConnection {
         private static final AttributeKey<KafkaConnection> ATTR_KEY =
                 AttributeKey.valueOf("KafkaConnection");
 
         private final Channel channel;
+        private final CompletableFuture<Void> connectFuture;
         private CompletableFuture<byte[]> responseFuture;
 
         /**
@@ -104,16 +115,18 @@ public class KafkaConnections {
                 responseFuture = new CompletableFuture<>();
             }
 
-            ByteBuf buf = channel.alloc().buffer(request.length).writeBytes(request);
-            CompletableFuture<Void> writeFuture = new CompletableFuture<>();
-            channel.writeAndFlush(buf).addListener(f -> {
-                if (f.isSuccess()) {
-                    writeFuture.complete(null);
-                } else {
-                    writeFuture.completeExceptionally(f.cause());
-                }
+            return connectFuture.thenCompose(ignore -> {
+                ByteBuf buf = channel.alloc().buffer(request.length).writeBytes(request);
+                CompletableFuture<Void> writeFuture = new CompletableFuture<>();
+                channel.writeAndFlush(buf).addListener(f -> {
+                    if (f.isSuccess()) {
+                        writeFuture.complete(null);
+                    } else {
+                        writeFuture.completeExceptionally(f.cause());
+                    }
+                });
+                return writeFuture.thenCompose(f -> responseFuture);
             });
-            return writeFuture.thenCompose(f -> responseFuture);
         }
 
         /**
@@ -127,6 +140,14 @@ public class KafkaConnections {
                 }
                 responseFuture = this.responseFuture;
                 this.responseFuture = null;
+            }
+            if (log.isDebugEnabled()) {
+                ByteBuffer buf = ByteBuffer.allocate(4 + 4);
+                buf.put(response, 0, buf.capacity());
+                buf.flip();
+                log.debug("Received response. Size: {}, CorrelationId: {}",
+                          buf.getInt(),
+                          buf.getInt());
             }
             responseFuture.complete(response);
         }
