@@ -2,7 +2,6 @@ package com.mayreh.kafka.http.tunnel.client;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -12,10 +11,14 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.Set;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import sun.nio.ch.SelChImpl;
 import sun.nio.ch.SelectionKeyImpl;
 
 public class TunnelingSocketChannel extends SocketChannel implements SelChImpl {
+    @Getter
+    @Accessors(fluent = true)
     private final SocketChannel delegate;
     private final InetSocketAddress tunnelServer;
     private InetSocketAddress brokerAddress = null;
@@ -144,24 +147,15 @@ public class TunnelingSocketChannel extends SocketChannel implements SelChImpl {
 
     @Override
     protected void implCloseSelectableChannel() throws IOException {
-        try {
-            Method method = delegate.getClass().getDeclaredMethod("implCloseSelectableChannel");
-            method.setAccessible(true);
-            method.invoke(delegate);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        ReflectionUtil.call(delegate, "implCloseSelectableChannel");
     }
 
     @Override
     protected void implConfigureBlocking(boolean block) throws IOException {
-        try {
-            Method method = delegate.getClass().getDeclaredMethod("implConfigureBlocking", boolean.class);
-            method.setAccessible(true);
-            method.invoke(delegate, block);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        ReflectionUtil.call(delegate,
+                            "implConfigureBlocking",
+                            new Class<?>[] { boolean.class },
+                            block);
     }
 
     @Override

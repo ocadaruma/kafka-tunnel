@@ -10,9 +10,11 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
 
+import sun.nio.ch.DefaultSelectorProvider;
+
 public class TunnelingSelectorProvider extends SelectorProvider {
     private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
-    private final SelectorProvider defaultProvider = sun.nio.ch.DefaultSelectorProvider.create();
+    private final SelectorProvider defaultProvider = DefaultSelectorProvider.create();
 
     @Override
     public DatagramChannel openDatagramChannel() throws IOException {
@@ -31,7 +33,12 @@ public class TunnelingSelectorProvider extends SelectorProvider {
 
     @Override
     public AbstractSelector openSelector() throws IOException {
-        return defaultProvider.openSelector();
+        if (!isCalledByKafkaSelector()) {
+            return defaultProvider.openSelector();
+        }
+
+        return new TunnelingSelector(this, defaultProvider.openSelector());
+//        return defaultProvider.openSelector();
     }
 
     @Override
@@ -41,17 +48,25 @@ public class TunnelingSelectorProvider extends SelectorProvider {
 
     @Override
     public SocketChannel openSocketChannel() throws IOException {
+        if (!isCalledByKafkaSelector()) {
+            return defaultProvider.openSocketChannel();
+        }
+
+        String tunnelEndpoint = System.getProperty(TUNNEL_ENDPOINT_PROPERTY);
+        String tunnelHost = tunnelEndpoint.split(":")[0];
+        int tunnelPort = Integer.parseInt(tunnelEndpoint.split(":")[1]);
+        SocketChannel delegate = defaultProvider.openSocketChannel();
+        return new TunnelingSocketChannel(
+                this, delegate, new InetSocketAddress(tunnelHost, tunnelPort));
+    }
+
+    private static boolean isCalledByKafkaSelector() {
         StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
         for (StackTraceElement element : stackTrace) {
             if ("org.apache.kafka.common.network.Selector".equals(element.getClassName())) {
-                String tunnelEndpoint = System.getProperty(TUNNEL_ENDPOINT_PROPERTY);
-                String tunnelHost = tunnelEndpoint.split(":")[0];
-                int tunnelPort = Integer.parseInt(tunnelEndpoint.split(":")[1]);
-                SocketChannel delegate = defaultProvider.openSocketChannel();
-                return new TunnelingSocketChannel(
-                        this, delegate, new InetSocketAddress(tunnelHost, tunnelPort));
+                return true;
             }
         }
-        return defaultProvider.openSocketChannel();
+        return false;
     }
 }
