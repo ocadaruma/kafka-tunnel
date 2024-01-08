@@ -12,12 +12,17 @@ import com.linecorp.armeria.server.HttpService;
 import com.linecorp.armeria.server.Server;
 import com.linecorp.armeria.server.logging.LoggingService;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TunnelingServer implements AutoCloseable {
     private final Server server;
     private final KafkaConnections connections = new KafkaConnections();
+    @Getter
+    @Accessors(fluent = true)
+    private final int port;
 
     public TunnelingServer(int port) {
         HttpService proxyService = (ctx, req) -> {
@@ -55,10 +60,11 @@ public class TunnelingServer implements AutoCloseable {
                 .http(port)
                 .build();
         server.start().join();
+        this.port = server.activeLocalPort();
     }
 
     public static void main(String[] args) {
-        int port = 8080;
+        int port = 0;
         if (args.length > 0) {
             port = Integer.parseInt(args[0]);
         }

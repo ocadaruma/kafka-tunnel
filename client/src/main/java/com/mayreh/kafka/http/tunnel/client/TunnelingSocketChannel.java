@@ -16,7 +16,7 @@ import lombok.experimental.Accessors;
 import sun.nio.ch.SelChImpl;
 import sun.nio.ch.SelectionKeyImpl;
 
-public class TunnelingSocketChannel extends SocketChannel implements SelChImpl {
+public class TunnelingSocketChannel extends SocketChannel {
     @Getter
     @Accessors(fluent = true)
     private final SocketChannel delegate;
@@ -147,44 +147,46 @@ public class TunnelingSocketChannel extends SocketChannel implements SelChImpl {
 
     @Override
     protected void implCloseSelectableChannel() throws IOException {
-        ReflectionUtil.call(delegate, "implCloseSelectableChannel");
+        delegate.close();
+//        ReflectionUtil.call(delegate, "implCloseSelectableChannel");
     }
 
     @Override
     protected void implConfigureBlocking(boolean block) throws IOException {
-        ReflectionUtil.call(delegate,
-                            "implConfigureBlocking",
-                            new Class<?>[] { boolean.class },
-                            block);
+        delegate.configureBlocking(block);
+//        ReflectionUtil.call(delegate,
+//                            "implConfigureBlocking",
+//                            new Class<?>[] { boolean.class },
+//                            block);
     }
 
-    @Override
-    public FileDescriptor getFD() {
-        return ((SelChImpl) delegate).getFD();
-    }
-
-    @Override
-    public int getFDVal() {
-        return ((SelChImpl) delegate).getFDVal();
-    }
-
-    @Override
-    public boolean translateAndUpdateReadyOps(int ops, SelectionKeyImpl ski) {
-        return ((SelChImpl) delegate).translateAndUpdateReadyOps(ops, ski);
-    }
-
-    @Override
-    public boolean translateAndSetReadyOps(int ops, SelectionKeyImpl ski) {
-        return ((SelChImpl) delegate).translateAndSetReadyOps(ops, ski);
-    }
-
-    @Override
-    public int translateInterestOps(int ops) {
-        return ((SelChImpl) delegate).translateInterestOps(ops);
-    }
-
-    @Override
-    public void kill() throws IOException {
-        ((SelChImpl) delegate).kill();
-    }
+//    @Override
+//    public FileDescriptor getFD() {
+//        return ((SelChImpl) delegate).getFD();
+//    }
+//
+//    @Override
+//    public int getFDVal() {
+//        return ((SelChImpl) delegate).getFDVal();
+//    }
+//
+//    @Override
+//    public boolean translateAndUpdateReadyOps(int ops, SelectionKeyImpl ski) {
+//        return ((SelChImpl) delegate).translateAndUpdateReadyOps(ops, ski);
+//    }
+//
+//    @Override
+//    public boolean translateAndSetReadyOps(int ops, SelectionKeyImpl ski) {
+//        return ((SelChImpl) delegate).translateAndSetReadyOps(ops, ski);
+//    }
+//
+//    @Override
+//    public int translateInterestOps(int ops) {
+//        return ((SelChImpl) delegate).translateInterestOps(ops);
+//    }
+//
+//    @Override
+//    public void kill() throws IOException {
+//        ((SelChImpl) delegate).kill();
+//    }
 }

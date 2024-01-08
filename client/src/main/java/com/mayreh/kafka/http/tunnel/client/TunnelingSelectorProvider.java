@@ -9,12 +9,25 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
+import java.util.function.BooleanSupplier;
 
 import sun.nio.ch.DefaultSelectorProvider;
 
 public class TunnelingSelectorProvider extends SelectorProvider {
     private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
     private final SelectorProvider defaultProvider = DefaultSelectorProvider.create();
+    private static volatile BooleanSupplier shouldEnableTunneling;
+    static {
+        shouldEnableTunneling = () -> {
+            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+            for (StackTraceElement element : stackTrace) {
+                if ("org.apache.kafka.common.network.Selector".equals(element.getClassName())) {
+                    return true;
+                }
+            }
+            return false;
+        };
+    }
 
     @Override
     public DatagramChannel openDatagramChannel() throws IOException {
@@ -33,12 +46,11 @@ public class TunnelingSelectorProvider extends SelectorProvider {
 
     @Override
     public AbstractSelector openSelector() throws IOException {
-        if (!isCalledByKafkaSelector()) {
+        if (!shouldEnableTunneling.getAsBoolean()) {
             return defaultProvider.openSelector();
         }
 
         return new TunnelingSelector(this, defaultProvider.openSelector());
-//        return defaultProvider.openSelector();
     }
 
     @Override
@@ -48,7 +60,7 @@ public class TunnelingSelectorProvider extends SelectorProvider {
 
     @Override
     public SocketChannel openSocketChannel() throws IOException {
-        if (!isCalledByKafkaSelector()) {
+        if (!shouldEnableTunneling.getAsBoolean()) {
             return defaultProvider.openSocketChannel();
         }
 
@@ -60,13 +72,8 @@ public class TunnelingSelectorProvider extends SelectorProvider {
                 this, delegate, new InetSocketAddress(tunnelHost, tunnelPort));
     }
 
-    private static boolean isCalledByKafkaSelector() {
-        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-        for (StackTraceElement element : stackTrace) {
-            if ("org.apache.kafka.common.network.Selector".equals(element.getClassName())) {
-                return true;
-            }
-        }
-        return false;
+    // Should be used only for testing
+    public static void setTunnelingCondition(BooleanSupplier shouldEnableTunneling) {
+        TunnelingSelectorProvider.shouldEnableTunneling = shouldEnableTunneling;
     }
 }

@@ -1,10 +1,17 @@
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
+plugins {
+    // applying here in plugins block to enable type-safe dsl
+    `java-library`
+}
+
 allprojects {
     group = "com.mayreh.kafka-tunnel"
     version = "$version" + if ((property("snapshot") as String).toBoolean()) "-SNAPSHOT" else ""
     extra["isReleaseVersion"] = !version.toString().endsWith("SNAPSHOT")
+    extra["kafkaVersion"] = "3.6.0"
+    extra["junitVersion"] = "5.10.1"
 }
 
 subprojects {
@@ -23,32 +30,48 @@ subprojects {
         withSourcesJar()
     }
 
-    dependencies {
-        "compileOnly"("org.projectlombok:lombok:1.18.30")
-        "annotationProcessor"("org.projectlombok:lombok:1.18.30")
-        "testCompileOnly"("org.projectlombok:lombok:1.18.30")
-        "testAnnotationProcessor"("org.projectlombok:lombok:1.18.30")
-
-        "testImplementation"("org.junit.jupiter:junit-jupiter:5.10.1")
-        "testImplementation"("org.mockito:mockito-core:5.8.0")
-        "testImplementation"("org.mockito:mockito-junit-jupiter:5.8.0")
+    configurations {
+        create("itImplementation").extendsFrom(implementation.get())
     }
 
-    tasks {
-        named<Test>("test") {
-            useJUnitPlatform()
+    sourceSets {
+        create("it") {
+            compileClasspath += sourceSets["main"].output
+            runtimeClasspath += sourceSets["main"].output
+        }
+    }
 
-            testLogging {
-                events(TestLogEvent.FAILED,
-                        TestLogEvent.PASSED,
-                        TestLogEvent.SKIPPED,
-                        TestLogEvent.STANDARD_OUT)
-                exceptionFormat = TestExceptionFormat.FULL
-                showExceptions = true
-                showCauses = true
-                showStackTraces = true
-                showStandardStreams = true
-            }
+    tasks.register<Test>("integrationTest") {
+        testClassesDirs = sourceSets["it"].output.classesDirs
+        classpath = sourceSets["it"].runtimeClasspath
+    }
+
+    dependencies {
+        compileOnly("org.projectlombok:lombok:1.18.30")
+        annotationProcessor("org.projectlombok:lombok:1.18.30")
+        testCompileOnly("org.projectlombok:lombok:1.18.30")
+        testAnnotationProcessor("org.projectlombok:lombok:1.18.30")
+
+        testImplementation("org.junit.jupiter:junit-jupiter:${project.extra["junitVersion"]}")
+        testImplementation("org.mockito:mockito-core:5.8.0")
+        testImplementation("org.mockito:mockito-junit-jupiter:5.8.0")
+
+        "itImplementation"("org.junit.jupiter:junit-jupiter:${project.extra["junitVersion"]}")
+    }
+
+    tasks.withType<Test> {
+        useJUnitPlatform()
+
+        testLogging {
+            events(TestLogEvent.FAILED,
+                    TestLogEvent.PASSED,
+                    TestLogEvent.SKIPPED,
+                    TestLogEvent.STANDARD_OUT)
+            exceptionFormat = TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            showStandardStreams = true
         }
     }
 
