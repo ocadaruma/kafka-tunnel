@@ -1,5 +1,6 @@
 package com.mayreh.kafka.http.tunnel.server;
 
+import static java.util.Collections.synchronizedSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.HashSet;
@@ -31,7 +32,7 @@ public class TunnelingTest {
                             return true;
                         }
                     }
-                    return Thread.currentThread().getName().contains("test-producer");
+                    return Thread.currentThread().getName().contains("test-client-producer");
                 });
     }
 
@@ -58,7 +59,7 @@ public class TunnelingTest {
     public void integrationTest_MessageDelivery() {
         Properties props = new Properties();
         props.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, rule.bootstrapServers());
-        props.setProperty(ProducerConfig.CLIENT_ID_CONFIG, "test-producer");
+        props.setProperty(ProducerConfig.CLIENT_ID_CONFIG, "test-client-producer");
         // TODO: support multiple in-flight requests
         props.setProperty(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1");
         props.setProperty(ProducerConfig.BATCH_SIZE_CONFIG, "0");
@@ -66,7 +67,7 @@ public class TunnelingTest {
         props.setProperty(ProducerConfig.ACKS_CONFIG, "all");
 
         int recordCount = 100;
-        Set<Integer> produced = new HashSet<>();
+        Set<Integer> produced = synchronizedSet(new HashSet<>());
         try (Producer<String, String> producer = new KafkaProducer<>(
                 props, Serdes.String().serializer(), Serdes.String().serializer())) {
             List<PartitionInfo> info = producer.partitionsFor(topic);
@@ -79,15 +80,11 @@ public class TunnelingTest {
                 int value = i;
                 producer.send(record, (m, e) -> {
                     if (e == null) {
-                        synchronized (produced) {
-                            produced.add(value);
-                        }
+                        produced.add(value);
                     }
                 });
             }
         }
-        synchronized (produced) {
-            assertEquals(recordCount, produced.size());
-        }
+        assertEquals(recordCount, produced.size());
     }
 }
