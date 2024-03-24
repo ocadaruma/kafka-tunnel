@@ -2,29 +2,33 @@ package com.mayreh.kafka.http.tunnel.server;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.function.Consumer;
 
 import com.mayreh.kafka.http.tunnel.server.KafkaConnections.ConnectionId;
 
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.HttpStatus;
 import com.linecorp.armeria.common.MediaType;
+import com.linecorp.armeria.common.SessionProtocol;
 import com.linecorp.armeria.server.HttpService;
 import com.linecorp.armeria.server.Server;
+import com.linecorp.armeria.server.ServerBuilder;
 import com.linecorp.armeria.server.logging.LoggingService;
 
-import lombok.Getter;
-import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TunnelingServer implements AutoCloseable {
     private final Server server;
     private final KafkaConnections connections = new KafkaConnections();
-    @Getter
-    @Accessors(fluent = true)
-    private final int port;
 
     public TunnelingServer(int port) {
+        this(builder -> {
+            builder.http(port);
+        });
+    }
+
+    public TunnelingServer(Consumer<ServerBuilder> serverConfigurator) {
         HttpService proxyService = (ctx, req) -> {
             String host = req.headers().get("Host");
             String brokerHost = host.substring(0, host.indexOf(':'));
@@ -54,13 +58,11 @@ public class TunnelingServer implements AutoCloseable {
             }));
         };
 
-        server = Server
-                .builder()
-                .service("/proxy", proxyService.decorate(LoggingService.newDecorator()))
-                .http(port)
-                .build();
+        ServerBuilder builder = Server.builder()
+                                      .service("/proxy", proxyService.decorate(LoggingService.newDecorator()));
+        serverConfigurator.accept(builder);
+        server = builder.build();
         server.start().join();
-        this.port = server.activeLocalPort();
     }
 
     public static void main(String[] args) {
@@ -70,6 +72,14 @@ public class TunnelingServer implements AutoCloseable {
         }
         TunnelingServer server = new TunnelingServer(port);
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
+    }
+
+    public int httpPort() {
+        return server.activeLocalPort(SessionProtocol.HTTP);
+    }
+
+    public int httpsPort() {
+        return server.activeLocalPort(SessionProtocol.HTTPS);
     }
 
     @Override

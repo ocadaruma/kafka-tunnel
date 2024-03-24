@@ -3,6 +3,8 @@ package com.mayreh.kafka.http.tunnel.server;
 import static java.util.Collections.synchronizedSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
@@ -43,10 +45,21 @@ public class TunnelingTest {
     private TunnelingServer server;
 
     @BeforeEach
-    public void setUp() {
-        topic = rule.admin().createRandomTopic(3, 3);
-        server = new TunnelingServer(0);
-        System.setProperty("kafka.http.tunnel.endpoint", "localhost:" + server.port());
+    public void setUp() throws Exception {
+//        Path profilerPath = Paths.get("/Users/hokada/develop/tools/async-profiler-2.8.3-macos/profiler.sh");
+//        long pid = ProcessHandle.current().pid();
+//        ProcessBuilder pb = new ProcessBuilder(
+//                profilerPath.toString(), "-f", "/tmp/profile-" + pid + ".jfr", "-d", "120", "-e", "wall", String.valueOf(pid));
+//        pb.start();
+
+        topic = rule.admin().createRandomTopic(1, 1);
+        server = new TunnelingServer(serverBuilder -> {
+            serverBuilder
+                    .tlsSelfSigned()
+                    .https(0);
+        });
+        System.setProperty("kafka.http.tunnel.endpoint", "localhost:" + server.httpsPort());
+        System.setProperty("kafka.http.tunnel.tls", "true");
     }
 
     @AfterEach

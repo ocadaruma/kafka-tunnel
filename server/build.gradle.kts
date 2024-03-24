@@ -5,6 +5,7 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic:1.4.12")
 
     itImplementation("org.apache.kafka:kafka-clients:${project.extra["kafkaVersion"]}")
+    itImplementation("tools.profiler:async-profiler:2.9")
     itImplementation(project(":testing"))
     // For ordinary use, adding client-dependency as runtimeOnly is enough but
     // we add itImplementation here to make it visible for integration tests

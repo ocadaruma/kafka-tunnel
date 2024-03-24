@@ -9,7 +9,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 public class HttpReceiveTest {
     @Mock
-    private SocketChannel delegate;
+    private TransportLayer transportLayer;
 
     @Test
     public void testRead() throws Exception {
@@ -37,9 +36,9 @@ public class HttpReceiveTest {
             dst.put(content, pos[0], read);
             pos[0] += read;
             return read;
-        }).when(delegate).read(any(ByteBuffer.class));
+        }).when(transportLayer).read(any(ByteBuffer.class));
 
-        HttpReceive receive = new HttpReceive(delegate);
+        HttpReceive receive = new HttpReceive(transportLayer);
 
         assertTrue(receive.hasRemaining());
 
@@ -67,9 +66,9 @@ public class HttpReceiveTest {
             dst.put(content, pos[0], read);
             pos[0] += read;
             return read;
-        }).when(delegate).read(any(ByteBuffer.class));
+        }).when(transportLayer).read(any(ByteBuffer.class));
 
-        HttpReceive receive = new HttpReceive(delegate);
+        HttpReceive receive = new HttpReceive(transportLayer);
 
         assertTrue(receive.hasRemaining());
 

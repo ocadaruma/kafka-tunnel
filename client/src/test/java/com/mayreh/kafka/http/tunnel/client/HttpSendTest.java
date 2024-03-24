@@ -9,7 +9,6 @@ import static org.mockito.Mockito.doAnswer;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 public class HttpSendTest {
     @Mock
-    private SocketChannel delegate;
+    private TransportLayer transportLayer;
 
     @Test
     public void testWrite() throws Exception {
@@ -31,9 +30,9 @@ public class HttpSendTest {
             written.put(dst);
             // assume all bytes are written
             return len;
-        }).when(delegate).write(any(ByteBuffer.class));
+        }).when(transportLayer).write(any(ByteBuffer.class));
 
-        HttpSend send = new HttpSend(delegate, new InetSocketAddress("localhost", 9092));
+        HttpSend send = new HttpSend(transportLayer, new InetSocketAddress("localhost", 9092));
 
         assertTrue(send.hasRemaining());
 

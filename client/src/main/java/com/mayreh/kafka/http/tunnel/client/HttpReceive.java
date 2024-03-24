@@ -2,7 +2,6 @@ package com.mayreh.kafka.http.tunnel.client;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -17,7 +16,7 @@ public class HttpReceive {
 
     private final Map<String, String> headers = new HashMap<>();
 
-    private final SocketChannel delegate;
+    private final TransportLayer transportLayer;
     private final StringBuilder lineBuilder = new StringBuilder();
 
     private ParseState state = ParseState.StatusLine;
@@ -32,14 +31,14 @@ public class HttpReceive {
         KafkaMessage,
     }
 
-    public HttpReceive(SocketChannel delegate) {
+    public HttpReceive(TransportLayer transportLayer) {
         lineBuffer = ByteBuffer.allocate(1024);
-        this.delegate = delegate;
+        this.transportLayer = transportLayer;
     }
 
     public int read(ByteBuffer dst) throws IOException {
         if (state == ParseState.KafkaMessage) {
-            int read = delegate.read(dst);
+            int read = transportLayer.read(dst);
             remainingMessageSize -= read;
             return read;
         }
@@ -62,7 +61,7 @@ public class HttpReceive {
         // remaining 58 bytes somewhere, which may complicate the implementation.
         lineBuffer.limit(dst.remaining());
 
-        delegate.read(lineBuffer);
+        transportLayer.read(lineBuffer);
         lineBuffer.flip();
 
         loop: while (lineBuffer.hasRemaining()) {

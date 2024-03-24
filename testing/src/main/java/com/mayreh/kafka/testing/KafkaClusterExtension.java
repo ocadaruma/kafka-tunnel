@@ -17,7 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RequiredArgsConstructor
 public class KafkaClusterExtension implements BeforeAllCallback, AfterAllCallback {
-    private static final int KAFKA_CLUSTER_SIZE = 3;
+    private static final int KAFKA_CLUSTER_SIZE = 1;
 
     private EmbeddedZooKeeper zooKeeper;
     private EmbeddedKafkaCluster kafkaCluster;

@@ -1,25 +1,37 @@
 package com.mayreh.kafka.http.tunnel.client;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Set;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;
-import sun.nio.ch.SelChImpl;
-import sun.nio.ch.SelectionKeyImpl;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class TunnelingSocketChannel extends SocketChannel {
     @Getter
     @Accessors(fluent = true)
     private final SocketChannel delegate;
+    private final TransportLayer transportLayer;
     private final InetSocketAddress tunnelServer;
     private InetSocketAddress brokerAddress = null;
     private HttpSend send = null;
@@ -28,10 +40,47 @@ public class TunnelingSocketChannel extends SocketChannel {
     public TunnelingSocketChannel(
             SelectorProvider provider,
             SocketChannel delegate,
-            InetSocketAddress tunnelServer) {
+            InetSocketAddress tunnelServer,
+            boolean enableTls) {
         super(provider);
+        if (enableTls) {
+            try {
+                TrustManager[] trustAllCerts = new TrustManager[] {
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {
+                            }
+
+                            @Override
+                            public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {
+                            }
+
+                            @Override
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return new X509Certificate[0];
+                            }
+                        }
+                };
+                SSLContext sslContext = SSLContext.getInstance("SSL");
+                sslContext.init(null, trustAllCerts, new SecureRandom());
+                SSLEngine engine = sslContext.createSSLEngine();
+                engine.setUseClientMode(true);
+
+                transportLayer = new TlsTransportLayer(delegate, engine);
+            } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            transportLayer = new CleartextTransportLayer(delegate);
+        }
         this.delegate = delegate;
         this.tunnelServer = tunnelServer;
+    }
+
+    public void setSelectionKey(SelectionKey key) {
+        transportLayer.setSelectionKey(key);
     }
 
     @Override
@@ -99,11 +148,22 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public int read(ByteBuffer dst) throws IOException {
+        if (!transportLayer.ready()) {
+            transportLayer.handshake();
+            return 0;
+        }
         if (receive == null) {
-            receive = new HttpReceive(delegate);
+            receive = new HttpReceive(transportLayer);
+            log.debug("Started receiving response: {}", brokerAddress);
+
+//            if (Arrays.stream(Thread.currentThread().getStackTrace()).anyMatch(s ->
+//                                                                                       s.getMethodName().equals("awaitNodeReady"))) {
+//                log.debug("await node ready on channel");
+//            }
         }
         int read = receive.read(dst);
         if (!receive.hasRemaining()) {
+            log.debug("Received response: {}", brokerAddress);
             receive = null;
         }
         return read;
@@ -116,8 +176,12 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public int write(ByteBuffer src) throws IOException {
+        if (!transportLayer.ready()) {
+            transportLayer.handshake();
+            return 0;
+        }
         if (send == null) {
-            send = new HttpSend(delegate, brokerAddress);
+            send = new HttpSend(transportLayer, brokerAddress);
         }
         int written = send.write(src);
         if (!send.hasRemaining()) {
@@ -147,6 +211,9 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     protected void implCloseSelectableChannel() throws IOException {
+        if (transportLayer != null) {
+            transportLayer.close();
+        }
         delegate.close();
 //        ReflectionUtil.call(delegate, "implCloseSelectableChannel");
     }

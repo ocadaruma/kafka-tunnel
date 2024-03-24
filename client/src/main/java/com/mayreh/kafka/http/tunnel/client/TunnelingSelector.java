@@ -6,10 +6,14 @@ import java.nio.channels.Selector;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class TunnelingSelector extends AbstractSelector {
     private final AbstractSelector delegate;
     private final Map<SelectionKey, TunnelingSelectionKey> keyLookupMap;
@@ -41,7 +45,11 @@ public class TunnelingSelector extends AbstractSelector {
                 new Class<?>[] { SelectionKey.class },
                 key);
         synchronized (this) {
-            return keyLookupMap.computeIfAbsent(key, k -> new TunnelingSelectionKey(this, key, ch));
+            TunnelingSelectionKey wrappedKey = keyLookupMap.computeIfAbsent(
+                    key,
+                    k -> new TunnelingSelectionKey(this, key, ch));
+            ((TunnelingSocketChannel) ch).setSelectionKey(wrappedKey);
+            return wrappedKey;
         }
     }
 
@@ -63,6 +71,19 @@ public class TunnelingSelector extends AbstractSelector {
     @Override
     public int select(long timeout) throws IOException {
         return delegate.select(timeout);
+//        if (Arrays.stream(Thread.currentThread().getStackTrace()).anyMatch(s ->
+//                s.getMethodName().equals("awaitNodeReady"))) {
+////            log.debug("await node ready on selector. timeout: {} ms", timeout);
+////            keys().forEach(k -> log.debug("interestops: {}", k.interestOps()));
+//            long t0 = System.nanoTime();
+//            int r = delegate.select(100);
+//            log.debug("took {} ms to select {} keys", (System.nanoTime() - t0) / 1_000_000, r);
+//            return r;
+//        }
+//        int r = delegate.select(100);
+//        log.debug("selected {} keys", r);
+//        return r;
+//        return delegate.selectNow();
     }
 
     @Override

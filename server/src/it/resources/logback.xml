@@ -9,7 +9,9 @@
   </root>
   <logger name="com.mayreh.kafka.http.tunnel" level="DEBUG" />
 
+  <logger name="com.linecorp.armeria" level="TRACE" />
   <logger name="org.apache.kafka" level="INFO" />
+<!--  <logger name="org.apache.kafka.clients.producer" level="TRACE" />-->
   <logger name="kafka" level="ERROR" />
   <logger name="state.change.logger" level="ERROR" />
   <logger name="org.apache.zookeeper" level="ERROR" />

@@ -15,6 +15,7 @@ import sun.nio.ch.DefaultSelectorProvider;
 
 public class TunnelingSelectorProvider extends SelectorProvider {
     private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
+    private static final String TUNNEL_TLS_PROPERTY = "kafka.http.tunnel.tls";
     private final SelectorProvider defaultProvider = DefaultSelectorProvider.create();
     private static volatile BooleanSupplier shouldEnableTunneling;
     static {
@@ -69,7 +70,10 @@ public class TunnelingSelectorProvider extends SelectorProvider {
         int tunnelPort = Integer.parseInt(tunnelEndpoint.split(":")[1]);
         SocketChannel delegate = defaultProvider.openSocketChannel();
         return new TunnelingSocketChannel(
-                this, delegate, new InetSocketAddress(tunnelHost, tunnelPort));
+                this,
+                delegate,
+                new InetSocketAddress(tunnelHost, tunnelPort),
+                Boolean.parseBoolean(System.getProperty(TUNNEL_TLS_PROPERTY, "false")));
     }
 
     // Should be used only for testing

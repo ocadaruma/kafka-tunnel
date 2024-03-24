@@ -3,7 +3,6 @@ package com.mayreh.kafka.http.tunnel.client;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 
 import lombok.extern.slf4j.Slf4j;
@@ -11,13 +10,13 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class HttpSend {
     private final ByteBuffer httpAndSize;
-    private final SocketChannel delegate;
+    private final TransportLayer transportLayer;
     private final InetSocketAddress brokerAddress;
 
     private int remainingMessageSize = -1;
 
-    public HttpSend(SocketChannel delegate, InetSocketAddress brokerAddress) {
-        this.delegate = delegate;
+    public HttpSend(TransportLayer transportLayer, InetSocketAddress brokerAddress) {
+        this.transportLayer = transportLayer;
         this.brokerAddress = brokerAddress;
         httpAndSize = ByteBuffer.allocate(512);
     }
@@ -35,8 +34,8 @@ public class HttpSend {
                 short apiKey = dup.getShort();
                 short apiVersion = dup.getShort();
                 int correlationId = dup.getInt();
-                log.debug("Sending request. Size: {}, ApiKey: {}, ApiVersion: {}, CorrelationId: {}",
-                          size, apiKey, apiVersion, correlationId);
+                log.debug("Sending request {}. Size: {}, ApiKey: {}, ApiVersion: {}, CorrelationId: {}",
+                          brokerAddress, size, apiKey, apiVersion, correlationId);
             }
 
             // we don't need to care about the fragmentation of int bytes
@@ -59,12 +58,13 @@ public class HttpSend {
             httpAndSize.flip();
         }
         if (httpAndSize.hasRemaining()) {
-            delegate.write(httpAndSize);
+            transportLayer.write(httpAndSize);
         }
         if (!httpAndSize.hasRemaining()) {
             if (remainingMessageSize > 0) {
                 // TODO: handle negative written bytes (EOF)
-                int w = delegate.write(message);
+                int w = transportLayer.write(message);
+
                 remainingMessageSize -= w;
                 written += w;
             }
