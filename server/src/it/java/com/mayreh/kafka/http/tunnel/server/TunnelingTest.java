@@ -24,6 +24,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import com.mayreh.kafka.http.tunnel.client.TunnelingSelectorProvider;
 import com.mayreh.kafka.testing.KafkaClusterExtension;
 
+import com.linecorp.armeria.client.WebClient;
+
 public class TunnelingTest {
     static {
         TunnelingSelectorProvider.setTunnelingCondition(

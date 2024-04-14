@@ -11,12 +11,16 @@ import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.function.BooleanSupplier;
 
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import sun.nio.ch.DefaultSelectorProvider;
 
 public class TunnelingSelectorProvider extends SelectorProvider {
     private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
     private static final String TUNNEL_TLS_PROPERTY = "kafka.http.tunnel.tls";
     private final SelectorProvider defaultProvider = DefaultSelectorProvider.create();
+    private static final NioEventLoopGroup nioEventLoopGroup;
     private static volatile BooleanSupplier shouldEnableTunneling;
     static {
         shouldEnableTunneling = () -> {
@@ -28,6 +32,7 @@ public class TunnelingSelectorProvider extends SelectorProvider {
             }
             return false;
         };
+        nioEventLoopGroup = new NioEventLoopGroup(1);
     }
 
     @Override
@@ -51,7 +56,7 @@ public class TunnelingSelectorProvider extends SelectorProvider {
             return defaultProvider.openSelector();
         }
 
-        return new TunnelingSelector(this, defaultProvider.openSelector());
+        return new TunnelingSelector(this);
     }
 
     @Override
@@ -67,13 +72,15 @@ public class TunnelingSelectorProvider extends SelectorProvider {
 
         String tunnelEndpoint = System.getProperty(TUNNEL_ENDPOINT_PROPERTY);
         String tunnelHost = tunnelEndpoint.split(":")[0];
+        boolean ssl = Boolean.parseBoolean(System.getProperty(TUNNEL_TLS_PROPERTY, "false"));
         int tunnelPort = Integer.parseInt(tunnelEndpoint.split(":")[1]);
-        SocketChannel delegate = defaultProvider.openSocketChannel();
-        return new TunnelingSocketChannel(
-                this,
-                delegate,
+        return new TunnelingSocketChannel2(
                 new InetSocketAddress(tunnelHost, tunnelPort),
-                Boolean.parseBoolean(System.getProperty(TUNNEL_TLS_PROPERTY, "false")));
+                this,
+                nioEventLoopGroup,
+                ssl ? SslContextBuilder
+                        .forClient()
+                        .build() : null);
     }
 
     // Should be used only for testing

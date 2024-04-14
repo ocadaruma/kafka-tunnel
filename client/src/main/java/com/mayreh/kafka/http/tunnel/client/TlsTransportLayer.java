@@ -80,16 +80,16 @@ public class TlsTransportLayer implements TransportLayer {
                     // Read any available bytes before attempting any writes to ensure that handshake failures
                     // reported by the peer are processed regardless of subsequent writes succeeding or not
                     // (which will likely fail when peer closes connection on handshake failure)
-                    int netRead = 0;
-                    if (selectionKey.isReadable()) {
-                        netRead = delegate.read(netReadBuffer);
-                        if (netRead < 0) {
-                            // TODO: handle EOF
-                        }
-                        if (netRead > 0) {
-                            netReadBuffer.flip();
-                        }
-                    }
+//                    int netRead = 0;
+//                    if (selectionKey.isReadable()) {
+//                        netRead = delegate.read(netReadBuffer);
+//                        if (netRead < 0) {
+//                            // TODO: handle EOF
+//                        }
+//                        if (netRead > 0) {
+//                            netReadBuffer.flip();
+//                        }
+//                    }
                     if (!tryFlushFully(netWriteBuffer)) {
                         return;
                     }
@@ -107,6 +107,7 @@ public class TlsTransportLayer implements TransportLayer {
                         case NEED_WRAP: {
                             netWriteBuffer.clear();
                             SSLEngineResult result = sslEngine.wrap(emptyBuffer, netWriteBuffer);
+                            netWriteBuffer.flip();
                             switch (result.getStatus()) {
                                 case BUFFER_OVERFLOW:
                                     netWriteBuffer = growIfNecessary(
@@ -119,7 +120,6 @@ public class TlsTransportLayer implements TransportLayer {
                                 default:
                                     break;
                             }
-                            netWriteBuffer.flip();
                             selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
                             break;
                         }
@@ -127,6 +127,12 @@ public class TlsTransportLayer implements TransportLayer {
 //                            if (netRead <= 0) {
 //                                return;
 //                            }
+                            int nRead = delegate.read(netReadBuffer);
+                            if (nRead > 0) {
+                                netReadBuffer.flip();
+                            } else if (netReadBuffer.position() <= 0) {
+                                return;
+                            }
                             SSLEngineResult result = sslEngine.unwrap(netReadBuffer, emptyBuffer);
                             switch (result.getStatus()) {
                                 case BUFFER_UNDERFLOW:
