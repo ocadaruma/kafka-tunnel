@@ -52,6 +52,6 @@ public class TunnelingSelectionKey extends AbstractSelectionKey {
         if (channel.state().contains(ChannelState.Writable)) {
             ops |= OP_WRITE;
         }
-        return ops;
+        return ops & interestOps;
     }
 }

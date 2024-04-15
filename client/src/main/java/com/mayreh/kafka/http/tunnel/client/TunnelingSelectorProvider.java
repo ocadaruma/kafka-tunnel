@@ -9,18 +9,21 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
+import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
 
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import sun.nio.ch.DefaultSelectorProvider;
 
 public class TunnelingSelectorProvider extends SelectorProvider {
     private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
     private static final String TUNNEL_TLS_PROPERTY = "kafka.http.tunnel.tls";
     private final SelectorProvider defaultProvider = DefaultSelectorProvider.create();
-    private static final NioEventLoopGroup nioEventLoopGroup;
+    private final EventLoopGroup eventLoopGroup;
     private static volatile BooleanSupplier shouldEnableTunneling;
     static {
         shouldEnableTunneling = () -> {
@@ -32,7 +35,10 @@ public class TunnelingSelectorProvider extends SelectorProvider {
             }
             return false;
         };
-        nioEventLoopGroup = new NioEventLoopGroup(1);
+    }
+
+    public TunnelingSelectorProvider() {
+        eventLoopGroup = new NioEventLoopGroup(1, (Executor) null, defaultProvider);
     }
 
     @Override
@@ -77,9 +83,11 @@ public class TunnelingSelectorProvider extends SelectorProvider {
         return new TunnelingSocketChannel2(
                 new InetSocketAddress(tunnelHost, tunnelPort),
                 this,
-                nioEventLoopGroup,
+                defaultProvider,
+                eventLoopGroup,
                 ssl ? SslContextBuilder
                         .forClient()
+                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
                         .build() : null);
     }
 

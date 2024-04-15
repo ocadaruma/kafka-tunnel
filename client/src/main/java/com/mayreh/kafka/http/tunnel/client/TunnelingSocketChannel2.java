@@ -44,11 +44,10 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TunnelingSocketChannel2 extends SocketChannel {
-    private Channel channel;
+    private final Channel channel;
     private InetSocketAddress brokerAddress;
     private ByteBuffer writeBuffer;
     private final InetSocketAddress tunnelServer;
-    private final Bootstrap bootstrap;
     private final SocketAdaptor socket;
     private final Set<TunnelingSelectionKey> keys = ConcurrentHashMap.newKeySet();
     private final Deque<ByteBuffer> readBuffer = new ArrayDeque<>();
@@ -58,14 +57,15 @@ public class TunnelingSocketChannel2 extends SocketChannel {
     public TunnelingSocketChannel2(
             InetSocketAddress tunnelServer,
             SelectorProvider provider,
+            SelectorProvider defaultProvider,
             EventLoopGroup eventLoopGroup,
             SslContext sslContext) {
         super(provider);
         this.tunnelServer = tunnelServer;
-        bootstrap = new Bootstrap();
+        Bootstrap bootstrap = new Bootstrap();
         bootstrap
                 .group(eventLoopGroup)
-                .channel(NioSocketChannel.class)
+                .channelFactory(() -> new NioSocketChannel(defaultProvider))
                 .handler(new ChannelInitializer<Channel>() {
                     @Override
                     protected void initChannel(Channel ch) throws Exception {
@@ -80,10 +80,21 @@ public class TunnelingSocketChannel2 extends SocketChannel {
                                     @Override
                                     protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg)
                                             throws Exception {
+                                        if (msg.status().code() != 200) {
+                                            ioLock.lock();
+                                            try {
+                                                errors.addLast(new IOException("Invalid status: " + msg.status()));
+
+                                                return;
+                                            } finally {
+                                                ioLock.unlock();
+                                            }
+                                        }
                                         ByteBuffer buffer = ByteBuffer.allocate(msg.content().readableBytes());
                                         msg.content().readBytes(buffer);
                                         ioLock.lock();
                                         try {
+                                            buffer.flip();
                                             readBuffer.add(buffer);
                                             state.add(ChannelState.Readable);
                                             keys.forEach(key -> {
@@ -102,6 +113,7 @@ public class TunnelingSocketChannel2 extends SocketChannel {
         // buffer written bytes in memory here, we always consider the channel writable
         state.add(ChannelState.Writable);
         socket = new SocketAdaptor(this);
+        channel = bootstrap.register().syncUninterruptibly().channel();
     }
 
     public enum ChannelState {
@@ -167,15 +179,14 @@ public class TunnelingSocketChannel2 extends SocketChannel {
     @Override
     public boolean connect(SocketAddress remote) throws IOException {
         brokerAddress = (InetSocketAddress) remote;
-        ChannelFuture future = bootstrap.connect(tunnelServer);
-        channel = future.channel();
+        ChannelFuture future = channel.connect(tunnelServer);
         future.addListener(f -> keys.forEach(key -> {
             if ((key.interestOps() & SelectionKey.OP_CONNECT) != 0) {
                 if (future.isSuccess()) {
                     state.add(ChannelState.Connectable);
                     key.selector().wakeup();
                 } else {
-                    errors.add(future.cause());
+                    errors.addLast(future.cause());
                 }
             }
         }));
@@ -256,7 +267,7 @@ public class TunnelingSocketChannel2 extends SocketChannel {
                     HttpVersion.HTTP_1_1,
                     HttpMethod.POST,
                     "/proxy",
-                    null,
+                    buf,
                     DefaultHttpHeadersFactory
                             .headersFactory()
                             .newHeaders()
@@ -266,7 +277,7 @@ public class TunnelingSocketChannel2 extends SocketChannel {
                     DefaultHttpHeadersFactory
                             .trailersFactory()
                             .newEmptyHeaders());
-            channel.write(request);
+            channel.writeAndFlush(request);
             writeBuffer = null;
         }
         return writtenBytes;

@@ -54,11 +54,12 @@ public class TunnelingTest {
 //                profilerPath.toString(), "-f", "/tmp/profile-" + pid + ".jfr", "-d", "120", "-e", "wall", String.valueOf(pid));
 //        pb.start();
 
-        topic = rule.admin().createRandomTopic(1, 1);
+        topic = rule.admin().createRandomTopic(3, 3);
         server = new TunnelingServer(serverBuilder -> {
             serverBuilder
                     .tlsSelfSigned()
                     .https(0);
+//                    .http(0);
         });
         System.setProperty("kafka.http.tunnel.endpoint", "localhost:" + server.httpsPort());
         System.setProperty("kafka.http.tunnel.tls", "true");

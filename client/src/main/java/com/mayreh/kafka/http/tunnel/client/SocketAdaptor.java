@@ -88,14 +88,12 @@ public class SocketAdaptor extends Socket {
 
     @Override
     public synchronized void setSoTimeout(int timeout) throws SocketException {
-        wrap(() -> {
-            channel.setOption(SO_TIMEOUT, timeout);
-        });
+        // noop
     }
 
     @Override
     public synchronized int getSoTimeout() throws SocketException {
-        return wrap(() -> channel.getOption(SO_TIMEOUT));
+        return -1;
     }
 
     @Override

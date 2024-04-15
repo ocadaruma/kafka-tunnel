@@ -66,6 +66,7 @@ public class TunnelingSelector extends AbstractSelector {
     public int select(long timeout) throws IOException {
         selectLock.lock();
         try {
+            keys.removeAll(cancelledKeys());
             selectedKeys.clear();
             for (SelectionKey key : keys) {
                 TunnelingSelectionKey tunnelingKey = (TunnelingSelectionKey) key;
@@ -73,6 +74,9 @@ public class TunnelingSelector extends AbstractSelector {
                 if (readyOps != 0) {
                     selectedKeys.add(key);
                 }
+            }
+            if (!selectedKeys.isEmpty()) {
+                return selectedKeys.size();
             }
 
             waiter.await(timeout, TimeUnit.MILLISECONDS);
