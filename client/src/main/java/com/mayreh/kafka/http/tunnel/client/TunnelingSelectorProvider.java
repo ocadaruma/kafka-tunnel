@@ -12,7 +12,6 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
 
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -80,7 +79,7 @@ public class TunnelingSelectorProvider extends SelectorProvider {
         String tunnelHost = tunnelEndpoint.split(":")[0];
         boolean ssl = Boolean.parseBoolean(System.getProperty(TUNNEL_TLS_PROPERTY, "false"));
         int tunnelPort = Integer.parseInt(tunnelEndpoint.split(":")[1]);
-        return new TunnelingSocketChannel2(
+        return new TunnelingSocketChannel(
                 new InetSocketAddress(tunnelHost, tunnelPort),
                 this,
                 defaultProvider,

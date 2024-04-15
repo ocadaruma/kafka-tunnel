@@ -24,10 +24,11 @@ public class KafkaClusterExtension implements BeforeAllCallback, AfterAllCallbac
     @Getter
     @Accessors(fluent = true)
     private KafkaAdmin admin;
+    private final int clusterSize;
     private final Properties brokerProperties;
 
     public KafkaClusterExtension() {
-        this(new Properties());
+        this(KAFKA_CLUSTER_SIZE, new Properties());
     }
 
     public String bootstrapServers() {
@@ -43,18 +44,18 @@ public class KafkaClusterExtension implements BeforeAllCallback, AfterAllCallbac
     }
 
     @Override
+    public void beforeAll(ExtensionContext extensionContext) throws Exception {
+        zooKeeper = new EmbeddedZooKeeper();
+        kafkaCluster = new EmbeddedKafkaCluster(clusterSize,
+                                                zooKeeper.zkConnectAsString(),
+                                                brokerProperties);
+        admin = new KafkaAdmin(kafkaCluster.bootstrapServers());
+    }
+
+    @Override
     public void afterAll(ExtensionContext extensionContext) throws Exception {
         safeClose(admin);
         safeClose(kafkaCluster);
         safeClose(zooKeeper);
-    }
-
-    @Override
-    public void beforeAll(ExtensionContext extensionContext) throws Exception {
-        zooKeeper = new EmbeddedZooKeeper();
-        kafkaCluster = new EmbeddedKafkaCluster(KAFKA_CLUSTER_SIZE,
-                                                zooKeeper.zkConnectAsString(),
-                                                brokerProperties);
-        admin = new KafkaAdmin(kafkaCluster.bootstrapServers());
     }
 }

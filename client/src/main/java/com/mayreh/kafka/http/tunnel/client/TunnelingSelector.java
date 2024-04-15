@@ -6,16 +6,10 @@ import java.nio.channels.Selector;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -38,7 +32,7 @@ public class TunnelingSelector extends AbstractSelector {
 
     @Override
     protected SelectionKey register(AbstractSelectableChannel ch, int ops, Object att) {
-        TunnelingSocketChannel2 chan = (TunnelingSocketChannel2) ch;
+        TunnelingSocketChannel chan = (TunnelingSocketChannel) ch;
         TunnelingSelectionKey key = new TunnelingSelectionKey(this, chan);
         key.interestOps(ops);
         key.attach(att);

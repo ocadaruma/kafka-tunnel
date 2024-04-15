@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 public class SocketAdaptor extends Socket {
-    private final TunnelingSocketChannel2 channel;
+    private final TunnelingSocketChannel channel;
 
     @Override
     public InetAddress getInetAddress() {
