@@ -9,10 +9,14 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.handler.ssl.SslContext;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -21,23 +25,32 @@ public class TunnelingSelector extends AbstractSelector {
     private final Condition waiter = selectLock.newCondition();
     private final Set<SelectionKey> keys = new HashSet<>();
     private final Set<SelectionKey> selectedKeys = new HashSet<>();
+    private final EventLoopGroup eventLoopGroup;
+    private final SslContext sslContext;
 
-    public TunnelingSelector(SelectorProvider provider) {
+    public TunnelingSelector(
+            SelectorProvider provider,
+            SelectorProvider defaultProvider,
+            SslContext sslContext) {
         super(provider);
+        this.sslContext = sslContext;
+        eventLoopGroup = new NioEventLoopGroup(1, (Executor) null, defaultProvider);
     }
 
     @Override
     protected void implCloseSelector() throws IOException {
+        eventLoopGroup.shutdownGracefully().awaitUninterruptibly();
     }
 
     @Override
     protected SelectionKey register(AbstractSelectableChannel ch, int ops, Object att) {
-        TunnelingSocketChannel chan = (TunnelingSocketChannel) ch;
-        TunnelingSelectionKey key = new TunnelingSelectionKey(this, chan);
+        TunnelingSocketChannel channel = (TunnelingSocketChannel) ch;
+        channel.register(sslContext, eventLoopGroup);
+        TunnelingSelectionKey key = new TunnelingSelectionKey(this, channel);
         key.interestOps(ops);
         key.attach(att);
         keys.add(key);
-        chan.addSelectionKey(key);
+        channel.addSelectionKey(key);
         return key;
     }
 

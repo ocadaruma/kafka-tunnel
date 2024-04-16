@@ -5,8 +5,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.AbstractSelectionKey;
 
-import com.mayreh.kafka.http.tunnel.client.TunnelingSocketChannel.ChannelState;
-
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -39,16 +37,6 @@ public class TunnelingSelectionKey extends AbstractSelectionKey {
 
     @Override
     public int readyOps() {
-        int ops = 0;
-        if (channel.state().contains(ChannelState.Connectable)) {
-            ops |= OP_CONNECT;
-        }
-        if (channel.state().contains(ChannelState.Readable)) {
-            ops |= OP_READ;
-        }
-        if (channel.state().contains(ChannelState.Writable)) {
-            ops |= OP_WRITE;
-        }
-        return ops & interestOps;
+        return channel.readyOps() & interestOps;
     }
 }

@@ -11,8 +11,8 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.EnumSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -22,7 +22,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -43,28 +42,38 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TunnelingSocketChannel extends SocketChannel {
-    private final Channel channel;
     private InetSocketAddress brokerAddress;
     private ByteBuffer writeBuffer;
+    @Getter
+    @Accessors(fluent = true)
+    private volatile int readyOps;
+    private final SocketChannel socketChannel;
+    private final Channel channel;
     private final InetSocketAddress tunnelServer;
-    private final SocketAdaptor socket;
     private final Set<TunnelingSelectionKey> keys = ConcurrentHashMap.newKeySet();
     private final Deque<ByteBuffer> readBuffer = new ArrayDeque<>();
     private final Deque<Throwable> errors = new ArrayDeque<>();
     private final ReentrantLock ioLock = new ReentrantLock();
+    private final CompletableFuture<Void> registrationFuture = new CompletableFuture<>();
 
     public TunnelingSocketChannel(
             InetSocketAddress tunnelServer,
             SelectorProvider provider,
-            SelectorProvider defaultProvider,
-            EventLoopGroup eventLoopGroup,
-            SslContext sslContext) {
+            SelectorProvider defaultProvider) throws IOException {
         super(provider);
         this.tunnelServer = tunnelServer;
+        // Since actual write operation to the socket is done by Netty and we just
+        // buffer written bytes in memory here, we always consider the channel writable
+        readyOps |= SelectionKey.OP_WRITE;
+        socketChannel = defaultProvider.openSocketChannel();
+        channel = new NioSocketChannel(socketChannel);
+    }
+
+    public void register(SslContext sslContext, EventLoopGroup eventLoopGroup) {
         Bootstrap bootstrap = new Bootstrap();
         bootstrap
                 .group(eventLoopGroup)
-                .channelFactory(() -> new NioSocketChannel(defaultProvider))
+                .channelFactory(() -> channel)
                 .handler(new ChannelInitializer<Channel>() {
                     @Override
                     protected void initChannel(Channel ch) throws Exception {
@@ -82,7 +91,8 @@ public class TunnelingSocketChannel extends SocketChannel {
                                         if (msg.status().code() != 200) {
                                             ioLock.lock();
                                             try {
-                                                errors.addLast(new IOException("Invalid status: " + msg.status()));
+                                                errors.addLast(
+                                                        new IOException("Invalid status: " + msg.status()));
                                                 return;
                                             } finally {
                                                 ioLock.unlock();
@@ -94,7 +104,7 @@ public class TunnelingSocketChannel extends SocketChannel {
                                         try {
                                             buffer.flip();
                                             readBuffer.add(buffer);
-                                            state.add(ChannelState.Readable);
+                                            readyOps |= SelectionKey.OP_READ;
                                             keys.forEach(key -> {
                                                 if ((key.interestOps() & SelectionKey.OP_READ) != 0) {
                                                     key.selector().wakeup();
@@ -107,22 +117,10 @@ public class TunnelingSocketChannel extends SocketChannel {
                                 });
                     }
                 });
-        // Since actual write operation to the socket is done by Netty and we just
-        // buffer written bytes in memory here, we always consider the channel writable
-        state.add(ChannelState.Writable);
-        socket = new SocketAdaptor(this);
-        channel = bootstrap.register().syncUninterruptibly().channel();
+        bootstrap.register()
+                 .addListener(f -> registrationFuture.complete(null))
+                 .syncUninterruptibly();
     }
-
-    public enum ChannelState {
-        Connectable,
-        Readable,
-        Writable
-    }
-
-    @Getter
-    @Accessors(fluent = true)
-    private final EnumSet<ChannelState> state = EnumSet.noneOf(ChannelState.class);
 
     public void addSelectionKey(TunnelingSelectionKey key) {
         keys.add(key);
@@ -130,38 +128,37 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public SocketChannel bind(SocketAddress local) throws IOException {
-        throw new UnsupportedOperationException();
+        return socketChannel.bind(local);
     }
 
     @Override
     public <T> SocketChannel setOption(SocketOption<T> name, T value) throws IOException {
-        channel.config().setOption(ChannelOption.valueOf(name.name()), value);
-        return this;
+        return socketChannel.setOption(name, value);
     }
 
     @Override
     public <T> T getOption(SocketOption<T> name) throws IOException {
-        return channel.config().getOption(ChannelOption.valueOf(name.name()));
+        return socketChannel.getOption(name);
     }
 
     @Override
     public Set<SocketOption<?>> supportedOptions() {
-        throw new UnsupportedOperationException();
+        return socketChannel.supportedOptions();
     }
 
     @Override
     public SocketChannel shutdownInput() throws IOException {
-        throw new UnsupportedOperationException();
+        return socketChannel.shutdownInput();
     }
 
     @Override
     public SocketChannel shutdownOutput() throws IOException {
-        throw new UnsupportedOperationException();
+        return socketChannel.shutdownOutput();
     }
 
     @Override
     public Socket socket() {
-        return socket;
+        return socketChannel.socket();
     }
 
     @Override
@@ -177,18 +174,21 @@ public class TunnelingSocketChannel extends SocketChannel {
     @Override
     public boolean connect(SocketAddress remote) throws IOException {
         brokerAddress = (InetSocketAddress) remote;
-        ChannelFuture future = channel.connect(tunnelServer);
-        future.addListener(f -> keys.forEach(key -> {
-            if ((key.interestOps() & SelectionKey.OP_CONNECT) != 0) {
-                if (future.isSuccess()) {
-                    state.add(ChannelState.Connectable);
-                    key.selector().wakeup();
-                } else {
-                    errors.addLast(future.cause());
+        registrationFuture.whenComplete((v, t) -> {
+            ChannelFuture future = channel.connect(tunnelServer);
+            future.addListener(f -> keys.forEach(key -> {
+                if ((key.interestOps() & SelectionKey.OP_CONNECT) != 0) {
+                    if (future.isSuccess()) {
+                        readyOps |= SelectionKey.OP_CONNECT;
+                        key.selector().wakeup();
+                    } else {
+                        errors.addLast(future.cause());
+                    }
                 }
-            }
-        }));
-        return future.isSuccess();
+            }));
+        });
+
+        return false;
     }
 
     @Override
@@ -198,7 +198,7 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public SocketAddress getRemoteAddress() throws IOException {
-        return channel.remoteAddress();
+        return socketChannel.getRemoteAddress();
     }
 
     @Override
@@ -216,7 +216,7 @@ public class TunnelingSocketChannel extends SocketChannel {
                 readBuffer.pollFirst();
             }
             if (readBuffer.isEmpty()) {
-                state.remove(ChannelState.Readable);
+                readyOps &= ~SelectionKey.OP_READ;
             }
             return read;
         } finally {
@@ -302,12 +302,12 @@ public class TunnelingSocketChannel extends SocketChannel {
 
     @Override
     public SocketAddress getLocalAddress() throws IOException {
-        return channel.localAddress();
+        return socketChannel.getLocalAddress();
     }
 
     @Override
     protected void implCloseSelectableChannel() throws IOException {
-//        channel.close()
+        channel.close().awaitUninterruptibly();
     }
 
     @Override
