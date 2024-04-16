@@ -1,36 +1,10 @@
 package com.mayreh.kafka.http.tunnel.client;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Set;
 
 public class Utils {
-    public interface IOSupplier<T> {
-        T get() throws IOException;
-    }
-
-    public interface IORunnable {
-        void run() throws IOException;
-    }
-
-    public static <T> T unchecked(IOSupplier<T> supplier) {
-        try {
-            return supplier.get();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    public static void unchecked(IORunnable runnable) {
-        try {
-            runnable.run();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
     public static <T> Set<T> ungrowableSet(Set<T> underlying) {
         return new Set<T>() {
             @Override

@@ -15,6 +15,17 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import sun.nio.ch.DefaultSelectorProvider;
 
+/**
+ * A {@link SelectorProvider} that provides a family of nio classes to
+ * tunnels Kafka protocol through a single HTTP endpoint.
+ * <p>
+ * This class is expected to be used to replace the default {@link SelectorProvider}
+ * in the JVM by setting the system property {@code java.nio.channels.spi.SelectorProvider}.
+ * <p>
+ * Since multiple SelectorProvider cannot be configured in the JVM, this class only
+ * provides tunneling capabilities when the calling class is {@code org.apache.kafka.common.network.Selector},
+ * otherwise it delegates to the default {@link DefaultSelectorProvider}.
+ */
 public class TunnelingSelectorProvider extends SelectorProvider {
     private static final String TUNNEL_ENDPOINT_PROPERTY = "kafka.http.tunnel.endpoint";
     private static final String TUNNEL_TLS_PROPERTY = "kafka.http.tunnel.tls";

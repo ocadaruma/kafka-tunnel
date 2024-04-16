@@ -39,7 +39,7 @@ public class TunnelingSelector extends AbstractSelector {
 
     @Override
     protected void implCloseSelector() throws IOException {
-        eventLoopGroup.shutdownGracefully().awaitUninterruptibly();
+        eventLoopGroup.shutdownGracefully().syncUninterruptibly();
     }
 
     @Override
