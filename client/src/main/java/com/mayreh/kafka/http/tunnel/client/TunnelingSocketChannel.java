@@ -249,6 +249,8 @@ public class TunnelingSocketChannel extends SocketChannel {
     public int write(ByteBuffer src) throws IOException {
         int writtenBytes = 0;
         if (writeBuffer == null) {
+            // As of current kafka-clients implementation, the first 4 bytes (for request size) are
+            // written in single call so we don't need to care about partial write. So safe to getInt() here.
             int kafkaRequestSize = src.getInt();
             writtenBytes += 4;
             writeBuffer = ByteBuffer.allocate(4 + kafkaRequestSize);
