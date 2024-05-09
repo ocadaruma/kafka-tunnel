@@ -4,7 +4,7 @@ Tunneling Kafka protocol over HTTP.
 This enables you to use your Java Kafka clients in environments where Kafka brokers are behind a firewall and only HTTP is allowed.
 
 > [!WARNING]
-> This project is in very early stage of development. It's not ready for production use.
+> This project is still in PoC phase. It's not ready for production use.
 
 ## How it works
 
@@ -46,7 +46,7 @@ First, add the dependency to your client app:
 runtimeOnly 'com.mayreh.kafka-tunnel:client:0.1.0-SNAPSHOT'
 ```
 
-Then, configure the tunnel server endpoint via Java system property:
+Then, configure the tunnel server endpoint via Java system property for your client, then run the application.
 
 ```
 -Dkafka.http.tunnel.endpoint=localhost:8080
