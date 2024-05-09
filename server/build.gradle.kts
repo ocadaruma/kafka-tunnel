@@ -1,3 +1,7 @@
+plugins {
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+}
+
 dependencies {
     implementation("com.linecorp.armeria:armeria:1.26.4")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
