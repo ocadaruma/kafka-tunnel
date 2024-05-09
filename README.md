@@ -40,3 +40,14 @@ java -cp server/build/libs/server-*-SNAPSHOT-all.jar com.mayreh.kafka.http.tunne
 
 ### Client
 
+First, add the dependency to your client app:
+
+```
+runtimeOnly 'com.mayreh.kafka-tunnel:client:0.1.0-SNAPSHOT'
+```
+
+Then, configure the tunnel server endpoint via Java system property:
+
+```
+-Dkafka.http.tunnel.endpoint=localhost:8080
+```
